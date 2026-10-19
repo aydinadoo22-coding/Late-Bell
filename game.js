@@ -1,7 +1,7 @@
 'use strict';
 const $=id=>document.getElementById(id), TAU=Math.PI*2;
 const subjects=[['Math',10],['Science',20],['History',30],['Yearbook',40],['ELA',50],['P.E.','GYM'],['Lunch','MPR']];
-let level='Normal',state=null,last=performance.now(),keys=new Set(),depth=[],drag=null,lastMapSignature=null,lastStartSignature=null;
+let level='Normal',state=null,last=performance.now(),keys=new Set(),depth=[],drag=null,lastStartSignature=null,lastWingShapes=[];
 const canvas=document.createElement('canvas');canvas.id='view';canvas.tabIndex=0;canvas.setAttribute('aria-label','First-person school maze. W and S walk, A and D turn, E opens the door ahead.');$('scene').prepend(canvas);const ctx=canvas.getContext('2d');
 const itemAtlas=new Image();itemAtlas.src='assets/items.png';const principalArt=new Image();principalArt.src='assets/principal.png';const monitorArt=new Image();monitorArt.src='assets/hall-monitor.png';const studentArt=new Image();studentArt.src='assets/students.png';
 const shuffle=a=>a.map(v=>[Math.random(),v]).sort((a,b)=>a[0]-b[0]).map(v=>v[1]);
@@ -10,16 +10,20 @@ function tone(freq=440,duration=.1,volume=.035,type='sine'){if(!soundOn)return;t
 const tools=document.createElement('div');tools.className='view-tools';tools.innerHTML='<button id="sound" aria-pressed="false">Sound off</button><button id="fullscreen">Full screen ⛶</button>';$('scene').append(tools);const badge=document.createElement('div');badge.id='viewHud';$('scene').append(badge);const toast=document.createElement('div');toast.id='toast';toast.setAttribute('aria-hidden','true');$('scene').append(toast);let toastTimeout;
 $('sound').onclick=()=>{soundOn=!soundOn;$('sound').textContent=soundOn?'Sound on':'Sound off';$('sound').setAttribute('aria-pressed',soundOn);tone(330,.1,.02);if(soundOn){try{hum=audioContext.createOscillator();const gain=audioContext.createGain();hum.type='sine';hum.frequency.value=52;gain.gain.value=.012;hum.connect(gain);gain.connect(audioContext.destination);hum.start()}catch{}}else if(hum){try{hum.stop()}catch{}hum=null}};$('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await $('scene').requestFullscreen()}catch{say('Full screen is unavailable in this browser.')}};
 function populate(s){
-const W=45,H=35; s.grid=Array.from({length:H},()=>Array(W).fill(1));s.doors=[];s.zones=[];let layout;do{layout=Array.from({length:4},()=>({side:Math.random()<.5?1:15,branch:Math.random()<.5?6:11}));}while(JSON.stringify(layout)===lastMapSignature);lastMapSignature=JSON.stringify(layout);s.layout=layout;
+const W=45,H=35; s.grid=Array.from({length:H},()=>Array(W).fill(1));s.doors=[];s.zones=[];s.layout=[];
 const line=(x1,y1,x2,y2)=>{let dx=Math.sign(x2-x1),dy=Math.sign(y2-y1);for(let x=x1,y=y1;;x+=dx,y+=dy){s.grid[y][x]=0;if(x===x2&&y===y2)break}};
 const door=(a,x,y,ax,ay)=>{s.grid[y][x]=2;s.doors.push({...a,x,y,adjacent:[[ax,ay]]})};
 // Generate a new central maze, then connect each isolated subject wing.
 function carve(x,y){s.grid[y][x]=0;for(const [dx,dy]of shuffle([[2,0],[-2,0],[0,2],[0,-2]])){const nx=x+dx,ny=y+dy;if(nx>=19&&nx<=23&&ny>=13&&ny<=21&&s.grid[ny][nx]===1){s.grid[y+dy/2][x+dx/2]=0;carve(nx,ny)}}}carve(21,17);
 const leftY=shuffle([15,17,19])[0],rightY=shuffle([15,17,19])[0];line(11,leftY,19,leftY);line(23,rightY,35,rightY);line(21,5,21,13);line(11,10,11,24);line(35,10,35,24);
 const wingSubjects=shuffle(['Math','Science','History','ELA']);const wings=[[1,4],[25,4],[1,24],[25,24]].map(([x,y],i)=>[wingSubjects[i],x,y]);
-for(const [index,[subject,bx,y]]of wings.entries()){const end=bx+s.layout[index].side;line(bx+1,y,bx+15,y);line(bx+1,y+6,bx+15,y+6);line(end,y,end,y+6);s.zones.push({subject,x1:bx,y1:y-2,x2:bx+17,y2:y+8});const rooms=shuffle(s.assignments.filter(a=>a.subject===subject));for(let i=0;i<6;i++){let x=bx+3+(i%3)*5,hy=y+(i<3?0:6),dy=i<3?-1:1;door(rooms[i],x,hy+dy,x,hy)}
-// A short side passage gives each complex an extra corner and dead end.
-const branch=bx+s.layout[index].branch;line(branch,y+6,branch,y+8);
+for(const [index,[subject,bx,y]]of wings.entries()){
+// A connected 3-by-3 maze of hallway junctions replaces the repeated U shape.
+let edges,signature;do{edges=[];const visited=new Set();function grow(cx,cy){visited.add(cx+','+cy);for(const [dx,dy]of shuffle([[1,0],[-1,0],[0,1],[0,-1]])){const nx=cx+dx,ny=cy+dy;if(nx<0||nx>2||ny<0||ny>2||visited.has(nx+','+ny))continue;edges.push([[cx,cy],[nx,ny]]);grow(nx,ny)}}grow(Math.floor(Math.random()*3),Math.floor(Math.random()*3));if(Math.random()<.45){const unused=[];for(let cy=0;cy<3;cy++)for(let cx=0;cx<3;cx++)for(const [dx,dy]of [[1,0],[0,1]]){const nx=cx+dx,ny=cy+dy;if(nx>2||ny>2)continue;const key=[[cx,cy].join(','),[nx,ny].join(',')].sort().join(':');if(!edges.some(e=>e.map(p=>p.join(',')).sort().join(':')===key))unused.push([[cx,cy],[nx,ny]])}if(unused.length)edges.push(shuffle(unused)[0])}signature=edges.map(e=>e.map(p=>p.join(',')).sort().join(':')).sort().join('|')}while(signature===lastWingShapes[index]);lastWingShapes[index]=signature;s.layout.push(signature);
+for(const [[ax,ay],[ex,ey]]of edges)line(bx+3+ax*5,y+ay*3,bx+3+ex*5,y+ey*3);
+// Both upper and lower complexes connect to their central access hallway.
+const entryRow=y<17?y+6:y;line(bx+8,entryRow,bx+10,entryRow);
+s.zones.push({subject,x1:bx,y1:y-2,x2:bx+17,y2:y+8});const rooms=shuffle(s.assignments.filter(a=>a.subject===subject));for(let i=0;i<6;i++){const x=bx+3+(i%3)*5,hy=y+(i<3?0:6),dy=i<3?-1:1;door(rooms[i],x,hy+dy,x,hy)}
 }
 [['Yearbook',20,5],['P.E.',22,8],['Lunch',20,11]].forEach(([subject,x,y])=>door(s.assignments.find(a=>a.subject===subject),x,y,21,y));
 door(s.assignments.find(a=>a.id==='office'),22,5,21,5);
